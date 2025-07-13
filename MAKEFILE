@@ -1,14 +1,93 @@
+# Makefile for 动漫评分排名系统 (MzzbScore Edit) project
+
+.PHONY: help install clean run dev test build-exe format static_check static_check_fix
+
+# Default target
+help:
+	@echo "动漫评分排名系统 - 可用命令:"
+	@echo "  help             - 显示此帮助信息"
+	@echo "  install          - 安装依赖项"
+	@echo "  clean            - 清理临时文件"
+	@echo "  run              - 运行应用程序"
+	@echo "  dev              - 开发模式运行"
+	@echo "  test             - 运行测试"
+	@echo "  build-exe        - 构建EXE文件"
+	@echo "  format           - 代码格式化"
+	@echo "  static_check     - 静态代码检查"
+	@echo "  static_check_fix - 修复静态代码问题"
+
+# Install dependencies
+install:
+	@echo "安装依赖项..."
+	pip install --upgrade pip
+	pip install -r requirements.txt
+	@echo "依赖项安装完成"
+
+# Clean temporary files
+clean:
+	@echo "清理临时文件..."
+	@if exist __pycache__ rmdir /s /q __pycache__ >nul 2>&1
+	@for /d /r . %%d in (__pycache__) do @if exist "%%d" rmdir /s /q "%%d" >nul 2>&1
+	@if exist build rmdir /s /q build >nul 2>&1
+	@if exist dist rmdir /s /q dist >nul 2>&1
+	@if exist *.egg-info rmdir /s /q *.egg-info >nul 2>&1
+	@if exist *.log del /q *.log >nul 2>&1
+	@if exist build_info.txt del /q build_info.txt >nul 2>&1
+	@if exist test_output.txt del /q test_output.txt >nul 2>&1
+	@if exist test_error.txt del /q test_error.txt >nul 2>&1
+	@echo "清理完成"
+
+# Run the application
+run:
+	@echo "启动动漫评分排名系统..."
+	python main.py
+
+# Development mode
+dev: clean
+	@echo "开发模式启动..."
+	python -u main.py
+
+# Run tests
+test:
+	@echo "运行测试..."
+	@python -c "import app.core.application; print('模块导入测试通过')"
+	@python -c "import app.services.excel_service; print('Excel服务模块测试通过')"
+	@python -c "import app.services.ranking_service; print('排名服务模块测试通过')"
+	@echo "基础测试完成"
+
+# Build EXE file using PyInstaller
+build-exe: clean
+	@echo "构建EXE文件..."
+	pip install pyinstaller
+	pyinstaller --onefile --name mzzbscore-edit --console --clean --distpath dist --workpath build --optimize 2 --hidden-import=pandas --hidden-import=openpyxl --hidden-import=numpy --hidden-import=app.core.application --hidden-import=app.services.excel_service --hidden-import=app.services.ranking_service --collect-submodules=app main.py
+	@echo "EXE文件构建完成: dist/mzzbscore-edit.exe"
+
+# Code formatting
 format:
 	# 如果你要取消检查，在文件开头加 # ruff: noqa
 	# doc https://github.com/astral-sh/ruff
 	#pip3 install ruff~=0.8.2
 	ruff format . --respect-gitignore --line-length 150 --target-version py39
 
+# Static code check
 static_check:
 	#pip3 install ruff~=0.8.2
 	# 可以用ruff check . --fix 快速修复
 	ruff check .
 
+# Fix static code issues
 static_check_fix:
 	#pip3 install ruff~=0.8.2
 	ruff check . --fix
+
+# Install development dependencies
+install-dev: install
+	@echo "安装开发依赖..."
+	pip install pyinstaller ruff
+	@echo "开发环境设置完成"
+
+# Quick setup for new environment
+setup: install-dev
+	@echo "项目环境设置完成"
+	@echo "运行 'make run' 启动程序"
+	@echo "运行 'make build-exe' 构建EXE文件"

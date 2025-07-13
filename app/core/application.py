@@ -185,7 +185,7 @@ class Application(BaseService):
             try:
                 print("\n请选择要执行的操作:")
                 print("1. 编辑成首月评分表格")
-                print("2. 编辑成完结评分表格")
+                # print("2. 编辑成完结评分表格")
                 print("Q. 退出")
                 
                 choice = input("请输入选项 (1/2/Q): ").strip().upper()
@@ -213,8 +213,8 @@ class Application(BaseService):
         try:
             if choice == '1':
                 self._process_monthly_scores()
-            elif choice == '2':
-                self._process_final_scores()
+            # elif choice == '2':
+            #     self._process_final_scores()
             else:
                 print("无效的操作选择")
                 

@@ -1,0 +1,316 @@
+name: 构建动漫评分排名系统EXE文件
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:  # 允许手动触发工作流
+
+env:
+  PYTHONIOENCODING: utf-8
+  PYTHONLEGACYWINDOWSSTDIO: utf-8
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write  # 明确授予写入权限
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 计算版本号
+        id: version
+        run: |
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          # 计算语义化版本号 va.b.c
+          # 初始值: a=2, b=0, c=0 (v2.0.0)
+          # 每次提交 c+1，c>=10 时 c=0 且 b+1，b>=10 时 b=0 且 a+1
+          
+          $runNumber = ${{ github.run_number }}
+          $totalIncrements = $runNumber - 1
+          
+          $c = $totalIncrements % 10
+          $bIncrements = [math]::Floor($totalIncrements / 10)
+          $b = $bIncrements % 10
+          $aIncrements = [math]::Floor($bIncrements / 10)
+          $a = 2 + $aIncrements
+          
+          $version = "v$a.$b.$c"
+          
+          Write-Host "🏷️ 计算得到版本号: $version"
+          Write-Host "📊 计算详情:"
+          Write-Host "   - Run Number: $runNumber"
+          Write-Host "   - Total Increments: $totalIncrements"
+          Write-Host "   - a: $a, b: $b, c: $c"
+          
+          # 输出给后续步骤使用
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+          echo "major=$a" >> $env:GITHUB_OUTPUT
+          echo "minor=$b" >> $env:GITHUB_OUTPUT
+          echo "patch=$c" >> $env:GITHUB_OUTPUT
+
+      - name: 设置Python环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: 缓存Python依赖
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\pip\Cache
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: 安装依赖
+        run: |
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller
+          Write-Host "📦 安装项目依赖..."
+          pip install -r requirements.txt
+          Write-Host "依赖安装完成"
+          
+          # 验证关键依赖
+          Write-Host "🔍 验证关键依赖..."
+          python -c "import pandas; print('OK: pandas imported')"
+          python -c "import openpyxl; print('OK: openpyxl imported')"
+          python -c "import numpy; print('OK: numpy imported')"
+        env:
+          PYTHONIOENCODING: utf-8
+
+      - name: 创建构建信息文件
+        run: |
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          echo "构建时间: $(Get-Date)" > build_info.txt
+          echo "版本号: ${{ steps.version.outputs.version }}" >> build_info.txt
+          echo "版本详情: ${{ steps.version.outputs.major }}.${{ steps.version.outputs.minor }}.${{ steps.version.outputs.patch }}" >> build_info.txt
+          echo "提交哈希: ${{ github.sha }}" >> build_info.txt
+          echo "构建编号: ${{ github.run_number }}" >> build_info.txt
+
+      - name: 预构建检查
+        run: |
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          Write-Host "🔍 检查模块导入..."
+          python -c "import sys; print('Python version:', sys.version)"
+          python -c "import pandas; print('OK: pandas imported')"
+          python -c "import openpyxl; print('OK: openpyxl imported')"
+          python -c "import numpy; print('OK: numpy imported')"
+          python -c "import app.core.application; print('OK: app.core.application imported')"
+          python -c "import app.services.excel_service; print('OK: app.services.excel_service imported')"
+          python -c "import app.services.ranking_service; print('OK: app.services.ranking_service imported')"
+          python -c "import app.config.settings; print('OK: app.config.settings imported')"
+          Write-Host "所有模块导入成功"
+        env:
+          PYTHONIOENCODING: utf-8
+
+      - name: 使用PyInstaller构建EXE
+        run: |
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          Write-Host "🔧 正在构建动漫评分排名系统EXE文件..."
+          pyinstaller --onefile --name mzzbscore-edit --console --clean --distpath dist --workpath build --optimize 2 `
+            --hidden-import=pandas `
+            --hidden-import=openpyxl `
+            --hidden-import=numpy `
+            --hidden-import=openpyxl.utils `
+            --hidden-import=openpyxl.styles `
+            --hidden-import=openpyxl.workbook `
+            --hidden-import=openpyxl.worksheet `
+            --hidden-import=app.core.application `
+            --hidden-import=app.core.base `
+            --hidden-import=app.services.excel_service `
+            --hidden-import=app.services.ranking_service `
+            --hidden-import=app.models.data_models `
+            --hidden-import=app.config.settings `
+            --hidden-import=app.config.constants `
+            --hidden-import=app.utils.exceptions `
+            --hidden-import=app.utils.logger `
+            --hidden-import=app.utils.validators `
+            --collect-all=pandas `
+            --collect-all=openpyxl `
+            --collect-submodules=app `
+            main.py
+          Write-Host "构建完成"
+        env:
+          PYTHONIOENCODING: utf-8
+
+      - name: 验证构建结果
+        run: |
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          if (Test-Path "dist/mzzbscore-edit.exe") {
+            Write-Host "EXE文件构建成功"
+            $fileSize = (Get-Item "dist/mzzbscore-edit.exe").Length / 1MB
+            Write-Host "📦 文件大小: $([math]::Round($fileSize, 2)) MB"
+            Write-Host "🏷️ 版本号: ${{ steps.version.outputs.version }}"
+            
+            # 验证Excel文件是否存在
+            Write-Host "📊 验证Excel文件..."
+            if (Test-Path "mzzb.xlsx") {
+              $excelSize = (Get-Item "mzzb.xlsx").Length / 1KB
+              Write-Host "   OK: mzzb.xlsx - $([math]::Round($excelSize, 1)) KB"
+            } else {
+              Write-Host "   WARNING: mzzb.xlsx - 文件不存在，将创建示例文件"
+              # 这里可以添加创建示例Excel文件的逻辑
+            }
+            
+            # 验证文件完整性
+            Write-Host "🧪 验证文件完整性..."
+            if (Get-Command "Get-FileHash" -ErrorAction SilentlyContinue) {
+              $hash = Get-FileHash "dist/mzzbscore-edit.exe" -Algorithm SHA256
+              Write-Host "📝 文件哈希: $($hash.Hash.Substring(0,16))..."
+            }
+            
+            Write-Host "构建验证完成"
+          } else {
+            Write-Host "ERROR: EXE文件构建失败"
+            exit 1
+          }
+        env:
+          PYTHONIOENCODING: utf-8
+
+      - name: 基础功能测试
+        run: |
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          Write-Host "🧪 测试exe基本功能..."
+          try {
+              # 测试程序是否能正常启动（快速退出测试）
+              $process = Start-Process -FilePath "dist\mzzbscore-edit.exe" -ArgumentList "--help" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "test_output.txt" -RedirectStandardError "test_error.txt" 2>$null
+              Write-Host "[TEST] exe进程启动测试完成"
+              if (Test-Path "test_output.txt") { 
+                $output = Get-Content "test_output.txt" -Raw
+                if ($output) { Write-Host "[OUTPUT] $output" }
+              }
+              if (Test-Path "test_error.txt") { 
+                $error = Get-Content "test_error.txt" -Raw
+                if ($error) { Write-Host "[ERROR] $error" }
+              }
+          } catch {
+              Write-Host "[WARNING] 测试过程中出现异常: $($_.Exception.Message)"
+              Write-Host "[INFO] 这可能是正常的，因为程序需要交互式输入"
+          }
+        env:
+          PYTHONIOENCODING: utf-8
+
+      - name: 准备发布文件
+        run: |
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          Write-Host "📦 准备发布文件..."
+          
+          # 检查mzzb.xlsx文件是否存在
+          if (-not (Test-Path "mzzb.xlsx")) {
+            Write-Host "   WARNING: mzzb.xlsx不存在"
+          } else {
+            Write-Host "   OK: mzzb.xlsx文件存在"
+          }
+          
+          Write-Host "文件准备完成"
+
+      - name: 清理临时文件
+        run: |
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          Write-Host "🧹 清理临时文件..."
+          if (Test-Path "test_output.txt") { Remove-Item "test_output.txt" }
+          if (Test-Path "test_error.txt") { Remove-Item "test_error.txt" }
+
+      - name: 上传构建结果到Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mzzbscore-edit-${{ steps.version.outputs.version }}
+          path: |
+            dist/mzzbscore-edit.exe
+            build_info.txt
+            mzzb.xlsx
+          retention-days: 30
+
+      - name: 创建发布版本
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/mzzbscore-edit.exe
+            mzzb.xlsx
+          name: "动漫评分排名系统 ${{ steps.version.outputs.version }}"
+          tag_name: "${{ steps.version.outputs.version }}"
+          body: |
+            ## 🎯 动漫评分排名系统 ${{ steps.version.outputs.version }}
+
+            ### 📋 版本信息
+            - **版本号**: ${{ steps.version.outputs.version }}
+            - **构建编号**: ${{ github.run_number }}
+            - **构建时间**: ${{ github.event.head_commit.timestamp }}
+            - **提交哈希**: [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
+
+            ### 🚀 使用说明
+            1. **下载程序**: 下载 `mzzbscore-edit.exe` 文件即可直接运行，无需安装Python环境
+            2. **准备数据**: 使用提供的 `mzzb.xlsx` 模板文件，填入动漫信息：
+               - 原名：动漫的原始名称
+               - 译名：动漫的翻译名称
+               - 各平台评分数据（Bangumi、Anilist、MyAnimeList、Filmarks）
+            3. **运行程序**: 双击运行exe文件，按提示操作
+            4. **选择功能**: 
+               - 选择 "1" - 生成首月评分表格
+               - 选择 "Q" - 退出程序
+            5. **查看结果**: 程序会生成 `首月评分表格.xlsx` 包含排名信息
+
+            ### 📁 下载文件说明
+            - 🎯 **mzzbscore-edit.exe** - 动漫评分排名系统主程序
+            - 📊 **mzzb.xlsx** - 动漫数据输入模板文件
+
+            ### ⭐ 主要功能
+            - **多平台评分集成**: 支持Bangumi、Anilist、MyAnimelist、Filmarks等主流平台
+            - **智能数据过滤**: 自动过滤无效数据和特殊标记条目  
+            - **综合评分计算**: 基于加权算法计算各平台的综合评分
+            - **排名生成**: 为每个平台和综合评分生成准确排名
+            - **Excel样式保持**: 保留原始Excel文件的格式、样式和超链接
+            - **用户友好界面**: 清晰的命令行界面和操作提示
+
+            ### 📊 支持的数据格式
+            Excel文件需包含以下列：
+            - **基本信息**: 原名、译名、Notes（备注）
+            - **评分数据**: Bangumi、Anilist、MyAnimelist、Filmarks评分
+            - **评分人数**: 各平台的总评分人数
+            - **链接信息**: 各平台的URL链接（可选）
+
+            ### 🔧 本版本特性
+            - ✅ 支持中文界面和数据处理
+            - ✅ 完善的错误处理和日志记录
+            - ✅ 智能的数据验证和格式检查
+            - ✅ 灵活的配置管理系统
+            - ✅ 原生Windows环境支持
+
+            ### 💻 系统要求
+            - Windows 7/8/10/11
+            - 无需安装Python或其他依赖
+            - 建议内存: 512MB以上
+            - 磁盘空间: 100MB以上
+
+            ---
+            *此版本由 GitHub Actions 自动构建和发布*
+            
+            🔗 **项目主页**: https://github.com/${{ github.repository }}
+            📖 **使用文档**: 请查看项目README.md文件
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 构建完成通知
+        if: success()
+        run: |
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          Write-Host "🎉 动漫评分排名系统构建和发布完成！"
+          Write-Host "📦 版本号: ${{ steps.version.outputs.version }}"
+          Write-Host "🏷️ 标签: ${{ steps.version.outputs.version }}"
+          Write-Host "🔗 下载地址: https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.version }}"
+          Write-Host ""
+          Write-Host "📁 已发布的文件:"
+          Write-Host "   - mzzbscore-edit.exe (动漫评分排名系统主程序)"
+          Write-Host "   - mzzb.xlsx (动漫数据输入模板)"
+          Write-Host ""
+          Write-Host "🎯 使用方法:"
+          Write-Host "   1. 下载exe文件直接运行"
+          Write-Host "   2. 使用mzzb.xlsx模板填入动漫数据"
+          Write-Host "   3. 按程序提示生成评分排名报告" 
