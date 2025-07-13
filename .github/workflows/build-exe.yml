@@ -232,61 +232,16 @@ jobs:
           files: |
             dist/mzzbscore-edit.exe
             mzzb.xlsx
-          name: "动漫评分排名系统 ${{ steps.version.outputs.version }}"
+          name: " ${{ steps.version.outputs.version }}"
           tag_name: "${{ steps.version.outputs.version }}"
           body: |
-            ## 🎯 动漫评分排名系统 ${{ steps.version.outputs.version }}
+            ## 🎯  ${{ steps.version.outputs.version }}
 
             ### 📋 版本信息
             - **版本号**: ${{ steps.version.outputs.version }}
             - **构建编号**: ${{ github.run_number }}
             - **构建时间**: ${{ github.event.head_commit.timestamp }}
             - **提交哈希**: [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
-
-            ### 🚀 使用说明
-            1. **下载程序**: 下载 `mzzbscore-edit.exe` 文件即可直接运行，无需安装Python环境
-            2. **准备数据**: 使用提供的 `mzzb.xlsx` 模板文件，填入动漫信息：
-               - 原名：动漫的原始名称
-               - 译名：动漫的翻译名称
-               - 各平台评分数据（Bangumi、Anilist、MyAnimeList、Filmarks）
-            3. **运行程序**: 双击运行exe文件，按提示操作
-            4. **选择功能**: 
-               - 选择 "1" - 生成首月评分表格
-               - 选择 "Q" - 退出程序
-            5. **查看结果**: 程序会生成 `首月评分表格.xlsx` 包含排名信息
-
-            ### 📁 下载文件说明
-            - 🎯 **mzzbscore-edit.exe** - 动漫评分排名系统主程序
-            - 📊 **mzzb.xlsx** - 动漫数据输入模板文件
-
-            ### ⭐ 主要功能
-            - **多平台评分集成**: 支持Bangumi、Anilist、MyAnimelist、Filmarks等主流平台
-            - **智能数据过滤**: 自动过滤无效数据和特殊标记条目  
-            - **综合评分计算**: 基于加权算法计算各平台的综合评分
-            - **排名生成**: 为每个平台和综合评分生成准确排名
-            - **Excel样式保持**: 保留原始Excel文件的格式、样式和超链接
-            - **用户友好界面**: 清晰的命令行界面和操作提示
-
-            ### 📊 支持的数据格式
-            Excel文件需包含以下列：
-            - **基本信息**: 原名、译名、Notes（备注）
-            - **评分数据**: Bangumi、Anilist、MyAnimelist、Filmarks评分
-            - **评分人数**: 各平台的总评分人数
-            - **链接信息**: 各平台的URL链接（可选）
-
-            ### 🔧 本版本特性
-            - ✅ 支持中文界面和数据处理
-            - ✅ 完善的错误处理和日志记录
-            - ✅ 智能的数据验证和格式检查
-            - ✅ 灵活的配置管理系统
-            - ✅ 原生Windows环境支持
-
-            ### 💻 系统要求
-            - Windows 7/8/10/11
-            - 无需安装Python或其他依赖
-            - 建议内存: 512MB以上
-            - 磁盘空间: 100MB以上
-
             ---
             *此版本由 GitHub Actions 自动构建和发布*
             
