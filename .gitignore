@@ -65,6 +65,4 @@ test_error.txt
 ~$*.xlsx
 ~$*.xls
 
-# Output files (可选：如果不想跟踪输出文件)
-首月评分表格.xlsx
-完结评分表格.xlsx
+monthly_anime_scores.xlsx

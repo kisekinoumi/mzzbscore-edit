@@ -78,9 +78,9 @@ mzzbscore-edit/
 
 ### 方式一：使用编译好的EXE文件（推荐）
 
-1. **下载程序**：从 [GitHub Releases](https://github.com/your-repo/releases) 页面下载最新版本的 `anime_ranking_system.exe`
+1. **下载程序**：从 [GitHub Releases](https://github.com/your-repo/releases) 页面下载最新版本的 `mzzbscore-edit.exe`
 2. **准备数据**：下载配套的 `mzzb.xlsx` 模板文件，按格式填入动漫数据
-3. **运行程序**：双击 `anime_ranking_system.exe` 直接运行
+3. **运行程序**：双击 `mzzbscore-edit.exe` 直接运行
 4. **选择操作**：
    - 选择 "1" - 生成首月评分表格
    - 选择 "Q" - 退出程序
@@ -97,8 +97,6 @@ mzzbscore-edit/
 Excel文件需要包含以下列：
 
 #### 必需列
-- `原名`: 动漫原始名称
-- `译名`: 动漫翻译名称
 - `Notes`: 备注信息（用于过滤特殊条目）
 
 #### 评分列（各平台）
@@ -116,7 +114,7 @@ Excel文件需要包含以下列：
 ### 输出文件
 
 程序会生成以下文件：
-- `首月评分表格.xlsx`: 包含排名信息的首月评分报告
+- `monthly_anime_scores.xlsx`: 包含排名信息的首月评分报告
 
 ## ⚙️ 配置选项
 
@@ -133,7 +131,7 @@ Excel文件需要包含以下列：
 ### 数据过滤规则
 
 系统会自动过滤以下条目：
-- Notes列包含特殊标记的条目（如"未播出"、"取消"等）
+- Notes列包含特殊标记的条目（如"*时长不足"、"*数据不足"等）
 - 评分数据不完整的条目
 
 ### 样式配置
@@ -141,12 +139,3 @@ Excel文件需要包含以下列：
 - **对齐方式**: 数据左对齐，垂直居中
 - **列分组**: 按功能对列进行分组并使用不同背景色
 - **边框**: 为所有数据单元格添加细边框
-
-
-
-### 发布内容
-每个版本发布包含：
-- `anime_ranking_system.exe` - 主程序文件
-- `mzzb.xlsx` - 数据输入模板
-- `mzzb_template_info.txt` - 使用说明
-
