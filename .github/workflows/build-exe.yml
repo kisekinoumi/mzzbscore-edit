@@ -222,7 +222,6 @@ jobs:
           path: |
             dist/mzzbscore-edit.exe
             build_info.txt
-            mzzb.xlsx
           retention-days: 30
 
       - name: 创建发布版本
@@ -231,7 +230,6 @@ jobs:
         with:
           files: |
             dist/mzzbscore-edit.exe
-            mzzb.xlsx
           name: " ${{ steps.version.outputs.version }}"
           tag_name: "${{ steps.version.outputs.version }}"
           body: |
@@ -263,7 +261,6 @@ jobs:
           Write-Host ""
           Write-Host "📁 已发布的文件:"
           Write-Host "   - mzzbscore-edit.exe (动漫评分排名系统主程序)"
-          Write-Host "   - mzzb.xlsx (动漫数据输入模板)"
           Write-Host ""
           Write-Host "🎯 使用方法:"
           Write-Host "   1. 下载exe文件直接运行"
