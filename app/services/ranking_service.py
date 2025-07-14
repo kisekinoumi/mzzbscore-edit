@@ -177,20 +177,21 @@ class RankingService(BaseService, IDataProcessor):
             for platform, (score_col, rank_col, _) in PLATFORM_COLUMNS.items():
                 try:
                     if score_col in valid_data.columns:
-                        valid_data = self._calculate_ranking(valid_data, score_col, rank_col)
+                        # 对于有效条目的平台排名，使用valid_entries_only=True
+                        valid_data = self._calculate_ranking(valid_data, score_col, rank_col, valid_entries_only=True)
                     else:
                         warning_msg = f"平台 '{platform}' 的评分列 '{score_col}' 不存在"
                         warnings.append(warning_msg)
                         self.logger.warning(warning_msg)
-                        # 确保排名列存在
-                        valid_data[rank_col] = pd.NA
+                        # 确保排名列存在，对于有效条目设置为"NaN"文本
+                        valid_data[rank_col] = "NaN"
                 except Exception as e:
                     error_msg = f"平台 '{platform}' 排名计算失败: {e}"
                     platform_errors.append(error_msg)
                     self.logger.error(error_msg)
-                    # 确保排名列存在
+                    # 确保排名列存在，对于有效条目设置为"NaN"文本
                     try:
-                        valid_data[rank_col] = pd.NA
+                        valid_data[rank_col] = "NaN"
                     except:
                         pass
             
@@ -360,7 +361,7 @@ class RankingService(BaseService, IDataProcessor):
             self.logger.error(f"计算综合评分时发生错误: {e}")
             raise ScoreCalculationError(f"综合评分计算失败: {e}")
     
-    def _calculate_ranking(self, data: pd.DataFrame, score_col: str, rank_col: str) -> pd.DataFrame:
+    def _calculate_ranking(self, data: pd.DataFrame, score_col: str, rank_col: str, valid_entries_only: bool = False) -> pd.DataFrame:
         """
         计算指定列的排名
         
@@ -368,6 +369,7 @@ class RankingService(BaseService, IDataProcessor):
             data: 数据
             score_col: 评分列名
             rank_col: 排名列名
+            valid_entries_only: 是否只处理有效条目（有综合评分的条目）
             
         Returns:
             pd.DataFrame: 包含排名的数据
@@ -381,7 +383,11 @@ class RankingService(BaseService, IDataProcessor):
             
             if score_col not in data.columns:
                 self.logger.warning(f"列 '{score_col}' 不存在，跳过排名计算")
-                data[rank_col] = pd.NA
+                if valid_entries_only:
+                    # 对于有效条目，没有评分列时设置为"NaN"文本
+                    data[rank_col] = "NaN"
+                else:
+                    data[rank_col] = pd.NA
                 return data
             
             # 转换为数值类型
@@ -391,7 +397,11 @@ class RankingService(BaseService, IDataProcessor):
             valid_scores = scores.dropna()
             if len(valid_scores) == 0:
                 self.logger.warning(f"列 '{score_col}' 中没有有效数值，无法计算排名")
-                data[rank_col] = pd.NA
+                if valid_entries_only:
+                    # 对于有效条目，没有有效评分时设置为"NaN"文本
+                    data[rank_col] = "NaN"
+                else:
+                    data[rank_col] = pd.NA
                 return data
             
             # 计算排名
@@ -401,11 +411,28 @@ class RankingService(BaseService, IDataProcessor):
                 na_option=self._ranking_config["na_option"]
             )
             
-            # 转换为整数类型（支持NaN）
-            data[rank_col] = ranks.astype('Int64')
+            # 根据是否为有效条目来处理无排名的情况
+            if valid_entries_only:
+                # 对于有效条目，将pd.NA转换为"NaN"字符串
+                # 先转换为整数类型，然后处理混合类型
+                ranks_int = ranks.astype('Int64')
+                # 创建object类型的Series来存储混合数据
+                result_ranks = []
+                for rank_val in ranks_int:
+                    if pd.isna(rank_val):
+                        result_ranks.append("NaN")
+                    else:
+                        result_ranks.append(int(rank_val))
+                data[rank_col] = result_ranks
+            else:
+                # 对于非有效条目，保持pd.NA
+                data[rank_col] = ranks.astype('Int64')
             
             # 统计
-            ranked_count = data[rank_col].notna().sum()
+            if valid_entries_only:
+                ranked_count = sum(1 for x in data[rank_col] if x != "NaN" and pd.notna(x))
+            else:
+                ranked_count = data[rank_col].notna().sum()
             self.logger.debug(f"'{score_col}' 列排名完成，共 {ranked_count} 个条目获得排名")
             
             return data
@@ -413,7 +440,10 @@ class RankingService(BaseService, IDataProcessor):
         except Exception as e:
             self.logger.error(f"计算排名时发生错误 (列: {score_col}): {e}")
             # 确保排名列存在
-            data[rank_col] = pd.NA
+            if valid_entries_only:
+                data[rank_col] = "NaN"
+            else:
+                data[rank_col] = pd.NA
             return data
     
     def _add_ranking_columns_to_excluded(self, valid_data: pd.DataFrame):

@@ -301,32 +301,225 @@ class ExcelService(BaseService, IFileHandler):
     
     def _insert_ranking_columns(self, ws, result: RankingResult, header_row: int) -> Dict[int, int]:
         """插入排名列并返回列偏移映射"""
-        # 这里需要根据具体的排名列信息来插入
-        # 暂时返回空的偏移映射
-        return {}
+        try:
+            self.logger.info("开始检查和插入排名列")
+            column_offset = {}
+            
+            # 获取当前所有列的映射 {列名: 列索引}
+            current_columns = {}
+            for col_idx in range(1, ws.max_column + 1):
+                cell_value = ws.cell(row=header_row, column=col_idx).value
+                if cell_value:
+                    current_columns[str(cell_value).strip()] = col_idx
+            
+            self.logger.debug(f"当前列映射: {current_columns}")
+            
+            # 需要处理的排名列配置: (评分列名, total列名, 排名列名)
+            ranking_configs = [
+                ("Bangumi", "Bangumi_total", "Bangumi_Rank"),
+                ("Anilist", "Anilist_total", "Anilist_Rank"), 
+                ("MyAnimelist", "MyAnimelist_total", "Myanimelist_Rank"),
+                ("Filmarks", "Filmarks_total", "Filmarks_Rank")
+            ]
+            
+            total_inserted = 0
+            
+            for score_col, total_col, rank_col in ranking_configs:
+                try:
+                    # 检查排名列是否已存在
+                    if rank_col in current_columns:
+                        self.logger.debug(f"排名列 {rank_col} 已存在于第 {current_columns[rank_col]} 列")
+                        continue
+                    
+                    # 查找 total 列的位置
+                    if total_col not in current_columns:
+                        self.logger.warning(f"找不到 {total_col} 列，跳过 {rank_col} 的插入")
+                        continue
+                    
+                    total_col_idx = current_columns[total_col]
+                    insert_position = total_col_idx + 1
+                    
+                    self.logger.debug(f"将在第 {insert_position} 列插入 {rank_col}")
+                    
+                    # 在 total 列右侧插入新列
+                    ws.insert_cols(insert_position)
+                    
+                    # 设置列标题
+                    ws.cell(row=header_row, column=insert_position).value = rank_col
+                    
+                    # 更新列映射（所有在插入位置右侧的列都要向右偏移1）
+                    new_current_columns = {}
+                    for col_name, col_idx in current_columns.items():
+                        if col_idx >= insert_position:
+                            new_current_columns[col_name] = col_idx + 1
+                        else:
+                            new_current_columns[col_name] = col_idx
+                    
+                    # 添加新插入的列
+                    new_current_columns[rank_col] = insert_position
+                    current_columns = new_current_columns
+                    
+                    total_inserted += 1
+                    self.logger.debug(f"成功插入排名列: {rank_col} 在第 {insert_position} 列")
+                    
+                except Exception as e:
+                    self.logger.error(f"插入排名列 {rank_col} 失败: {e}")
+            
+            # 现在填入排名数据
+            # 不再需要在这里处理排名数据，因为排名服务已经正确设置了"NaN"文本
+            # if hasattr(result, 'valid_data') and result.valid_data is not None:
+            #     self._fill_ranking_data(ws, result, current_columns, header_row)
+            
+            self.logger.info(f"排名列处理完成，插入了 {total_inserted} 列")
+            return column_offset
+            
+        except Exception as e:
+            self.logger.error(f"处理排名列时发生错误: {e}")
+            return {}
+    
+    def _fill_ranking_data(self, ws, result: RankingResult, column_mapping: Dict[str, int], header_row: int):
+        """填入排名数据到对应的列"""
+        try:
+            self.logger.debug("开始填入排名数据")
+            
+            # 创建有效数据字典便于查找
+            valid_data_dict = result.valid_data.set_index("原名").to_dict('index')
+            
+            # 排名列列表
+            rank_columns = ["Bangumi_Rank", "Anilist_Rank", "Myanimelist_Rank", "Filmarks_Rank"]
+            
+            # 统计写入情况
+            write_stats = {col: {"numeric": 0, "nan_text": 0, "missing": 0} for col in rank_columns}
+            
+            # 写入排名数据到对应行
+            rows_written = 0
+            for row_idx in range(header_row + 1, ws.max_row + 1):
+                # 获取动漫名称（第1列）
+                anime_name_cell = ws.cell(row=row_idx, column=1)
+                anime_name = anime_name_cell.value
+                
+                if anime_name and anime_name in valid_data_dict:
+                    # 这是有效条目（计算综合评分的条目）
+                    source_data = valid_data_dict[anime_name]
+                    
+                    # 为每个排名列写入数据
+                    for rank_col in rank_columns:
+                        if rank_col in column_mapping:
+                            col_idx = column_mapping[rank_col]
+                            
+                            if rank_col in source_data:
+                                rank_value = source_data[rank_col]
+                                # 使用更严格的检查：既要检查pd.notna又要检查不是pd.NA
+                                if pd.notna(rank_value) and rank_value is not pd.NA:
+                                    # 有排名数据，写入数值
+                                    ws.cell(row=row_idx, column=col_idx).value = rank_value
+                                    write_stats[rank_col]["numeric"] += 1
+                                else:
+                                    # 有效条目但该站点没有排名数据（rank_value是pd.NA或NaN），写入"NaN"文本
+                                    ws.cell(row=row_idx, column=col_idx).value = "NaN"
+                                    write_stats[rank_col]["nan_text"] += 1
+                                    self.logger.debug(f"为有效条目 '{anime_name}' 的 {rank_col} 写入'NaN'文本（原值: {rank_value}）")
+                            else:
+                                # 有效条目但没有这个排名数据列，写入"NaN"文本
+                                ws.cell(row=row_idx, column=col_idx).value = "NaN"
+                                write_stats[rank_col]["missing"] += 1
+                    
+                    rows_written += 1
+                else:
+                    # 非有效条目（不计算综合评分的条目），不处理排名数据
+                    pass
+            
+            # 输出统计信息
+            self.logger.debug(f"排名数据填入完成，处理了 {rows_written} 行有效条目")
+            for col, stats in write_stats.items():
+                if stats["numeric"] + stats["nan_text"] + stats["missing"] > 0:
+                    self.logger.info(f"{col}: {stats['numeric']}个数字排名, {stats['nan_text']}个'NaN'文本, {stats['missing']}个缺失列")
+            
+        except Exception as e:
+            self.logger.error(f"填入排名数据时发生错误: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
     
     def _reapply_hyperlinks(self, ws, hyperlinks: Dict, column_offset: Dict[int, int]):
         """重新应用超链接"""
         try:
-            # 清除所有超链接
+            self.logger.debug("开始重新应用超链接")
+            
+            # 首先清除所有超链接
             for row in ws.iter_rows(min_row=1, max_row=ws.max_row):
                 for cell in row:
                     if cell.hyperlink:
                         cell.hyperlink = None
             
-            # 重新应用超链接
+            # 获取原始文件的列映射（从超链接收集时的信息）
+            original_columns = {}
+            # 重新读取原始文件获取列映射
+            try:
+                temp_original = openpyxl.load_workbook("mzzb.xlsx")
+                temp_ws = temp_original.active
+                for col_idx in range(1, temp_ws.max_column + 1):
+                    cell_value = temp_ws.cell(row=2, column=col_idx).value
+                    if cell_value:
+                        original_columns[col_idx] = str(cell_value).strip()
+                temp_original.close()
+                self.logger.debug(f"原始列映射: {original_columns}")
+            except Exception as e:
+                self.logger.error(f"无法读取原始文件列映射: {e}")
+                return
+            
+            # 获取当前文件的列映射
+            current_columns = {}
+            column_name_to_index = {}
+            for col_idx in range(1, ws.max_column + 1):
+                cell_value = ws.cell(row=2, column=col_idx).value
+                if cell_value:
+                    col_name = str(cell_value).strip()
+                    current_columns[col_idx] = col_name
+                    column_name_to_index[col_name] = col_idx
+            
+            self.logger.debug(f"当前列映射: {current_columns}")
+            self.logger.debug(f"列名到索引映射: {column_name_to_index}")
+            
+            # 重新应用超链接：按列名匹配，而不是位置偏移
             for (orig_row, orig_col), link_info in hyperlinks.items():
                 try:
-                    new_col = orig_col + column_offset.get(orig_col, 0)
+                    # 获取原始列的列名
+                    if orig_col not in original_columns:
+                        self.logger.warning(f"原始第{orig_col}列没有列名，跳过超链接")
+                        continue
+                    
+                    original_col_name = original_columns[orig_col]
+                    
+                    # 在当前文件中查找同名列
+                    if original_col_name not in column_name_to_index:
+                        self.logger.warning(f"在当前文件中找不到列'{original_col_name}'，跳过超链接")
+                        continue
+                    
+                    new_col = column_name_to_index[original_col_name]
+                    
+                    self.logger.debug(f"超链接重定位: '{original_col_name}' 第{orig_col}列 -> 第{new_col}列")
+                    
+                    # 应用超链接到新位置
                     if new_col <= ws.max_column:
                         target_cell = ws.cell(row=orig_row, column=new_col)
                         target_cell.hyperlink = link_info['hyperlink']
+                        # 保持原有的显示值，不要覆盖
                         if target_cell.value is None:
                             target_cell.value = link_info['value']
+                        
+                        self.logger.debug(f"超链接已正确应用: 行{orig_row} '{original_col_name}' 第{orig_col}列->第{new_col}列")
+                    else:
+                        self.logger.warning(f"新列位置 {new_col} 超出范围，跳过超链接")
+                        
                 except Exception as e:
-                    self.logger.warning(f"重新应用超链接失败: {e}")
+                    self.logger.warning(f"重新应用超链接失败 (行{orig_row}, 列{orig_col}): {e}")
+            
+            self.logger.debug("超链接重新应用完成")
+            
         except Exception as e:
-            self.logger.warning(f"处理超链接时发生错误: {e}")
+            self.logger.error(f"处理超链接时发生严重错误: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
     
     def _write_data_to_worksheet(self, ws, result: RankingResult, final_col_map: Dict[str, int], header_row: int):
         """将数据写入工作表"""
